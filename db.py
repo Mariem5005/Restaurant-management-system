@@ -1321,7 +1321,7 @@ def build_employee_tab(frame):
 
     ttk.Button(delivery_orders_frame, text="Assign Delivery", command=assign_delivery).grid(row=0, column=4, padx=5)
 
-    # Delivery Orders Treeview
+    # Delivery Orders Treeview - ok
     delivery_orders_tree = ttk.Treeview(delivery_orders_frame,
                                         columns=("Order_ID", "Customer", "Delivery_Boy", "Fee", "Status"),
                                         show="headings")
