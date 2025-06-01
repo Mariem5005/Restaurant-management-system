@@ -1168,7 +1168,7 @@ def build_employee_tab(frame):
             if not emp:
                 messagebox.showerror("Error", "Employee not found.")
                 return
-            if emp[0] != 'Delivery':
+            if emp[0] != 'D':
                 messagebox.showerror("Error", "Employee is not a delivery person.")
                 return
 
@@ -1291,32 +1291,69 @@ def build_employee_tab(frame):
     delivery_fee_entry.grid(row=0, column=3)
 
     def assign_delivery():
-        emp_id = delivery_entries["Employee_ID"].get().strip()
         order_id = delivery_order_id_entry.get().strip()
         fee = delivery_fee_entry.get().strip()
 
-        if not emp_id or not order_id or not fee:
-            messagebox.showerror("Input Error", "All fields are required.")
+        if not order_id or not fee:
+            messagebox.showerror("Input Error", "Order ID and Delivery Fee are required.")
             return
 
         try:
             fee = float(fee)
+
+        # Step 1: Get the customer's area from the order
+            cursor.execute("""
+                SELECT c.City
+                FROM Orders o
+                JOIN Customer c ON o.Customer_ID = c.Customer_ID
+                WHERE o.Order_ID = %s
+            """, (int(order_id),))
+            result = cursor.fetchone()
+            if not result:
+                messagebox.showerror("Error", "Order or customer not found.")
+                return
+            area_code = result[0]
+
+        # Step 2: Find available delivery boy assigned to this area
+            cursor.execute("""
+                SELECT db.Employee_ID
+                FROM Delivery_Boy db
+                JOIN Delivery_Assignment da ON db.Employee_ID = da.Employee_ID
+                WHERE da.Area_Code = %s AND db.Availability = TRUE
+                LIMIT 1
+            """, (area_code,))
+            delivery_boy = cursor.fetchone()
+
+            if not delivery_boy:
+                messagebox.showerror("Error", f"No available delivery boy found for area '{area_code}'")
+                return
+
+            emp_id = delivery_boy[0]
+
+        # Step 3: Assign delivery
             cursor.execute("""
                 INSERT INTO Delivery_Order (Order_ID, Delivery_fee, D_Employee_ID)
                 VALUES (%s, %s, %s)
-            """, (int(order_id), fee, int(emp_id)))
+            """, (int(order_id), fee, emp_id))
 
+        # Step 4: Update order status
             cursor.execute("""
-                UPDATE Orders SET Status='Out for Delivery'
-                WHERE Order_ID=%s
+                UPDATE Orders SET Status='Out for Delivery' WHERE Order_ID=%s
             """, (int(order_id),))
 
+        # Step 5: Set delivery boy as unavailable
+            cursor.execute("""
+            UPDATE Delivery_Boy SET Availability = 0 WHERE Employee_ID = %s
+            """, (emp_id,))
+
             conn.commit()
-            messagebox.showinfo("Success", "Delivery assigned successfully.")
+            messagebox.showinfo("Success", f"Delivery assigned to employee {emp_id} for area '{area_code}'")
             load_delivery_orders()
             delivery_order_id_entry.delete(0, tk.END)
             delivery_fee_entry.delete(0, tk.END)
+
         except Exception as e:
+            conn.rollback()
             messagebox.showerror("Database Error", str(e))
 
     ttk.Button(delivery_orders_frame, text="Assign Delivery", command=assign_delivery).grid(row=0, column=4, padx=5)
